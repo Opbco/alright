@@ -126,6 +126,11 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+/env
 
 # Pyre type checker
 .pyre/
+
+#files folder
+/pdf_files
+/files
