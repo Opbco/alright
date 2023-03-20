@@ -20,6 +20,7 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
     UnexpectedAlertPresentException,
     NoSuchElementException,
+    TimeoutException
 )
 from webdriver_manager.chrome import ChromeDriverManager
 from functools import wraps
@@ -365,10 +366,10 @@ class WhatsApp(object):
         message = {
             "sender": '',
             "time": '',
-                    "message": "",
-                    "unread": False,
-                    "no_of_unread": 0,
-                    "group": False,
+            "message": "",
+            "unread": False,
+            "no_of_unread": 0,
+            "group": False,
         }
         if len(_message) == 2:
             message["sender"] = _message[0]
@@ -990,3 +991,125 @@ class WhatsApp(object):
             LOGGER.exception(
                 f"Exception raised while getting first chat: {bug}")
             return []
+
+
+class WhatsAppMinfopra(object):
+    def __init__(self, browser=None, time_out=600):
+        # CJM - 20220419: Added time_out=600 to allow the call with less than 600 sec timeout
+
+        self.BASE_URL = "https://dossier.minfopra.gov.cm/"
+        self.MINESEC_BASE_URL = "https://minesecdrh.cm/api/"
+
+        if not browser:
+            browser = webdriver.Chrome(
+                ChromeDriverManager().install(),
+                options=self.chrome_options,
+            )
+
+            handles = browser.window_handles
+            for _, handle in enumerate(handles):
+                if handle != browser.current_window_handle:
+                    browser.switch_to.window(handle)
+                    browser.close()
+
+        self.browser = browser
+        # CJM - 20220419: Added time_out=600 to allow the call with less than 600 sec timeout
+        self.wait = WebDriverWait(self.browser, time_out)
+        self.cli()
+        self.login()
+
+    @property
+    def chrome_options(self):
+        chrome_options = Options()
+        chrome_options.add_argument(
+            "--user-data-dir=" + platformdirs.user_data_dir("OPBco")
+        )
+        if sys.platform == "win32":
+            chrome_options.add_argument("--profile-directory=Default")
+        else:
+            chrome_options.add_argument("start-maximized")
+        return chrome_options
+
+    def cli(self):
+        """
+        LOGGER settings  [nCKbr]
+        """
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s - %(name)s -- [%(levelname)s] >> %(message)s"
+            )
+        )
+        LOGGER.addHandler(handler)
+        LOGGER.setLevel(logging.INFO)
+
+    def login(self):
+        self.browser.get(self.BASE_URL)
+        self.browser.maximize_window()
+
+    def catch_alert(self, seconds=10):
+        """catch_alert()
+
+        catches any sudden alert
+        """
+        try:
+            WebDriverWait(self.browser, seconds).until(EC.alert_is_present())
+            alert = self.browser.switch_to_alert.accept()
+            return True
+        except Exception as e:
+            LOGGER.exception(f"An exception occurred: {e}")
+            return False
+
+    def enter_name_matricule(self, name_matricule):
+        search_box = self.wait.until(
+            EC.presence_of_element_located(
+                (
+                    By.XPATH,
+                    '//*[@id="code_dossier"]',
+                )
+            )
+        )
+        search_box.clear()
+        search_box.send_keys(name_matricule)
+        search_box.send_keys(Keys.ENTER)
+        try:
+            result_xpath = ("//table[contains(@class, 'table_dossier_ajax')]/tbody/tr/td")
+            none_xpath = ("//div[@id='contain_ticket_invites']/div[contains(@class, 'alert')]/a")
+
+            messages = self.wait.until(
+                lambda ctrl_self: ctrl_self.find_elements(
+                    By.XPATH, result_xpath)
+                or ctrl_self.find_elements(By.XPATH, none_xpath)
+            )
+
+            clean_messages = []
+            
+            for message in messages:
+                _message = message.text.split("\n")[0]
+                if _message is None:
+                    LOGGER.info(f"Unknown message format: {_message}")
+                else:
+                    clean_messages.append(_message)
+            return WhatsAppMinfopra.clean_message(clean_messages)
+        except TimeoutException:
+            print("Timed out waiting for page to load")
+
+    @staticmethod
+    def clean_message(messages):
+        list_dict = []
+        if len(messages) > 0:
+            for i in range(0, len(messages)-1, 10):
+                message = {
+                    "code": messages[i],
+                    "date_create": messages[i+1],
+                    "nom_complet": messages[i+2],
+                    "objet": messages[i+3],
+                    "poste_detenteur": messages[i+4],
+                    "status": messages[i+5],
+                    "matricule": messages[i+6],
+                    "acte": messages[i+7],
+                    "date_signature": messages[i+8],
+                }
+                list_dict.append(message)
+                
+        return list_dict
