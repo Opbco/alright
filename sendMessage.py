@@ -24,3 +24,12 @@ smiley emoji
 specific emoji
 //div[@data-testid='list-item-{i}']/div/div/div/span[@data-emoji-index='{i}']
 """
+
+
+#MINFOPRA
+"""
+//*[@id="code_dossier"]
+//table[contains(@class, 'table_dossier_ajax')]
+//table[contains(@class, 'table_dossier_ajax')]/tbody/tr
+
+"""
